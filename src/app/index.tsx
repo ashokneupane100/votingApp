@@ -9,20 +9,25 @@ const HomeScreen = () => {
 
   useEffect(() => {
     const fetchPolls = async () => {
-      console.log("Fetching Now... ");
-      
-      const { data, error } = await supabase
-        .from('polls')
-        .select('*');
+      try {
+        console.log("Fetching Now... ");
         
-      if (error) {
-        console.error("Supabase error:", error);
-        Alert.alert("Error Fetching data");
-        return;
+        const { data, error } = await supabase
+          .from('polls')
+          .select('*');
+          
+        if (error) {
+          console.error("Supabase error:", error);
+          Alert.alert("Error Fetching data");
+          return;
+        }
+        
+        console.log(data);
+        setPolls(data || []);
+      } catch (err) {
+        console.error("Error in fetching polls:", err);
+        Alert.alert("Error", "Failed to load polls");
       }
-      
-      console.log(data);
-      setPolls(data || []);
     };
     
     fetchPolls();
