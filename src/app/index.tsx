@@ -1,30 +1,48 @@
-import { FlatList, StyleSheet, Text, View } from "react-native";
-import React from "react";
-import { Stack, Link } from "expo-router";
+import { Alert, FlatList, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Stack, Link, router } from "expo-router";
 import { AntDesign } from "@expo/vector-icons";
-
-
-// Let's make the poll data more realistic
-const polls = [
-  { id: "1", question: "Gagan Thapa" },
-  { id: "2", question: "Balen Shah" },
-  { id: "3", question: "Harke Haldaar" },
-];
+import { supabase } from "../lib/supabase";
 
 const HomeScreen = () => {
+  const [polls, setPolls] = useState([]);
+
+  useEffect(() => {
+    const fetchPolls = async () => {
+      console.log("Fetching Now... ");
+      
+      const { data, error } = await supabase
+        .from('polls')
+        .select('*');
+        
+      if (error) {
+        console.error("Supabase error:", error);
+        Alert.alert("Error Fetching data");
+        return;
+      }
+      
+      console.log(data);
+      setPolls(data || []);
+    };
+    
+    fetchPolls();
+  }, []);
+
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ 
-        title: "भोट दिनुहोस",
-        headerRight: () => (
-          <Link href={"/polls/new"}>
-            <AntDesign name="plus" size={20} color="gray" />
-          </Link>
-        )
-      }} />
+      <Stack.Screen
+        options={{
+          title: "भोट दिनुहोस",
+          headerRight: () => (
+            <Link href={"/polls/new"}>
+              <AntDesign name="plus" size={20} color="gray" />
+            </Link>
+          ),
+        }}
+      />
       <FlatList
         data={polls}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={{ padding: 10, gap: 5 }}
         renderItem={({ item }) => (
           <Link href={`/polls/${item.id}`}>
