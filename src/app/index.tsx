@@ -4,15 +4,15 @@ import { Stack, Link } from "expo-router";
 
 // Let's make the poll data more realistic
 const polls = [
-  { id: "1", question: "What is your favorite programming language?" },
-  { id: "2", question: "Which framework do you prefer?" },
-  { id: "3", question: "How many hours do you code per day?" },
+  { id: "1", question: "Gagan Thapa" },
+  { id: "2", question: "Balen Shah" },
+  { id: "3", question: "Harke Haldaar" },
 ];
 
 const HomeScreen = () => {
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ title: "Polls" }} />
+      <Stack.Screen options={{ title: "भोट दिनुहोस" }} />
       <FlatList
         data={polls}
         keyExtractor={(item) => item.id}
