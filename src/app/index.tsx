@@ -1,6 +1,6 @@
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import React from "react";
-import { Stack } from "expo-router";
+import { Stack, Link } from "expo-router";
 
 // Let's make the poll data more realistic
 const polls = [
@@ -11,20 +11,21 @@ const polls = [
 
 const HomeScreen = () => {
   return (
-    <>
-    <Stack.Screen options={{title:"Polls"
-    }}/>
-    <FlatList
-      data={polls}
-      style={{backgroundColor:'gainsboro'}}
-      contentContainerStyle={styles.container}
-      renderItem={() => (
-        <View style={styles.pollContainer}>
-          <Text style={styles.pollTitle}>Example Poll Question:</Text>
-        </View>
-      )}
-    />
-    </>
+    <View style={styles.container}>
+      <Stack.Screen options={{ title: "Polls" }} />
+      <FlatList
+        data={polls}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ padding: 10, gap: 5 }}
+        renderItem={({ item }) => (
+          <Link href={`/polls/${item.id}`}>
+            <View style={styles.pollContainer}>
+              <Text style={styles.pollTitle}>{item.question}</Text>
+            </View>
+          </Link>
+        )}
+      />
+    </View>
   );
 };
 
@@ -34,8 +35,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "gainsboro",
-    padding: 10,
-    gap: 5,
   },
   headerText: {
     fontSize: 24,
@@ -55,6 +54,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 2,
+    marginTop: 20,
   },
   pollTitle: {
     fontWeight: "bold",
