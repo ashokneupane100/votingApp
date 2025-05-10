@@ -1,5 +1,15 @@
 import { Stack, router } from "expo-router";
-import { Text, View, StyleSheet, TextInput, Button, Alert, ActivityIndicator } from "react-native";
+import { 
+  Text, 
+  View, 
+  StyleSheet, 
+  TextInput, 
+  Button, 
+  Alert, 
+  ActivityIndicator, 
+  TouchableOpacity, 
+  ScrollView
+} from "react-native";
 import { useState } from "react";
 import { Feather } from '@expo/vector-icons';
 import { supabase } from "../../lib/supabase";
@@ -25,42 +35,33 @@ export default function CreatePoll() {
     try {
       setCreating(true);
       
-      // Insert the poll first
+      // Insert the poll
       const { data: pollData, error: pollError } = await supabase
         .from('polls')
         .insert({
           question: question,
-          // Add any additional fields like created_by if you have auth
+          options: validOptions, // Store options directly in the poll record
+          createdAt: new Date().toISOString()
         })
         .select();
 
-      if (pollError) {
-        throw new Error(pollError.message);
+      if (pollError) throw pollError;
+      
+      if (!pollData || pollData.length === 0) {
+        throw new Error("Failed to create poll: No data returned");
       }
 
-      const pollId = pollData[0].id;
-
-      // Insert all options
-      const optionsToInsert = validOptions.map(option => ({
-        text: option,
-        poll_id: pollId
-      }));
-
-      const { error: optionsError } = await supabase
-        .from('options')
-        .insert(optionsToInsert);
-
-      if (optionsError) {
-        throw new Error(optionsError.message);
-      }
-
-      Alert.alert("Success", "Poll created successfully!", [
-        {
-          text: "OK",
-          onPress: () => router.replace("/")
-        }
-      ]);
-    } catch (error) {
+      Alert.alert(
+        "Success", 
+        "Poll created successfully!", 
+        [
+          {
+            text: "OK",
+            onPress: () => router.replace("/")
+          }
+        ]
+      );
+    } catch (error: any) {
       console.error("Error creating poll:", error);
       Alert.alert("Error", `Failed to create poll: ${error.message}`);
     } finally {
@@ -68,9 +69,31 @@ export default function CreatePoll() {
     }
   };
   
+  const addOption = () => {
+    setOptions([...options, ""]);
+  };
+
+  const removeOption = (index: number) => {
+    if (options.length <= 2) {
+      Alert.alert("Error", "You need at least two options");
+      return;
+    }
+    
+    const updatedOptions = [...options];
+    updatedOptions.splice(index, 1);
+    setOptions(updatedOptions);
+  };
+
+  const updateOption = (text: string, index: number) => {
+    const updatedOptions = [...options];
+    updatedOptions[index] = text;
+    setOptions(updatedOptions);
+  };
+  
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container}>
       <Stack.Screen options={{ title: "Create New Poll" }} />
+      
       <Text style={styles.label}>Question</Text>
       <TextInput
         onChangeText={setQuestion}
@@ -85,87 +108,113 @@ export default function CreatePoll() {
         <View key={index} style={styles.optionContainer}>
           <TextInput
             value={option}
-            onChangeText={(text) => {
-              const updated = [...options];
-              updated[index] = text;
-              setOptions(updated);
-            }}
+            onChangeText={(text) => updateOption(text, index)}
             placeholder={`Option ${index+1}`}
             style={styles.optionInput}
           />
-          <Feather 
-            name="x" 
-            size={20} 
-            color="black" 
-            onPress={() => {
-              if (options.length > 2) {
-                const updated = [...options];
-                updated.splice(index, 1);
-                setOptions(updated);
-              } else {
-                Alert.alert("Error", "You need at least two options");
-              }
-            }}
-            style={styles.deleteIcon} 
-          />
+          <TouchableOpacity
+            onPress={() => removeOption(index)}
+            style={styles.deleteButton}
+          >
+            <Feather name="x" size={20} color="black" />
+          </TouchableOpacity>
         </View>
       ))}
       
-      <View style={styles.buttonContainer}>
-        <Button 
-          title="Add option" 
-          onPress={() => setOptions([...options, ""])} 
-        />
-        <Button 
-          onPress={createPoll} 
-          title={creating ? "Creating..." : "Create Poll"} 
-          disabled={creating}
-        />
+      <View style={styles.buttonRow}>
+        <TouchableOpacity onPress={addOption} style={styles.addButton}>
+          <Feather name="plus" size={16} color="white" />
+          <Text style={styles.addButtonText}>Add option</Text>
+        </TouchableOpacity>
       </View>
       
-      {creating && (
-        <ActivityIndicator size="large" color="#0000ff" style={styles.loader} />
-      )}
-    </View>
+      <TouchableOpacity 
+        onPress={createPoll} 
+        style={[
+          styles.createButton,
+          creating && styles.disabledButton
+        ]}
+        disabled={creating}
+      >
+        {creating ? (
+          <ActivityIndicator size="small" color="white" />
+        ) : (
+          <Text style={styles.createButtonText}>Create Poll</Text>
+        )}
+      </TouchableOpacity>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    padding: 10,
-    gap: 5,
     flex: 1,
+    padding: 16,
+    backgroundColor: '#f5f5f5',
   },
   label: {
-    fontWeight: "500",
-    marginTop: 10,
+    fontWeight: "600",
+    marginTop: 16,
+    marginBottom: 8,
+    fontSize: 16,
   },
   input: {
     backgroundColor: "white",
-    padding: 10,
-    borderRadius: 10,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
   optionContainer: {
     position: 'relative',
-    marginVertical: 5,
+    marginVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   optionInput: {
     backgroundColor: "white",
-    padding: 10,
+    padding: 12,
     paddingRight: 40,
-    borderRadius: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    flex: 1,
   },
-  deleteIcon: {
+  deleteButton: {
     position: 'absolute',
-    right: 10,
-    top: 10,
+    right: 12,
+    padding: 4,
   },
-  buttonContainer: {
+  buttonRow: {
+    marginTop: 16,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 20,
+    justifyContent: 'flex-start',
   },
-  loader: {
-    marginTop: 20,
-  }
+  addButton: {
+    backgroundColor: '#3498db',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  addButtonText: {
+    color: 'white',
+    marginLeft: 6,
+  },
+  createButton: {
+    backgroundColor: '#2ecc71',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 24,
+  },
+  disabledButton: {
+    backgroundColor: '#95a5a6',
+  },
+  createButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 16,
+  },
 });

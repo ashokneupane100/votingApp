@@ -3,14 +3,18 @@ import React, { useEffect, useState } from "react";
 import { Stack, Link, router } from "expo-router";
 import { AntDesign } from "@expo/vector-icons";
 import { supabase } from "../lib/supabase";
+import { Tables } from "../types/supabase";
+
+type Poll = Tables<"polls">;
 
 const HomeScreen = () => {
-  const [polls, setPolls] = useState([]);
+  const [polls, setPolls] = useState<Poll[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchPolls = async () => {
       try {
-        console.log("Fetching Now... ");
+        setLoading(true);
         
         const { data, error } = await supabase
           .from('polls')
@@ -18,15 +22,16 @@ const HomeScreen = () => {
           
         if (error) {
           console.error("Supabase error:", error);
-          Alert.alert("Error Fetching data");
+          Alert.alert("Error", "Failed to fetch polls");
           return;
         }
         
-        console.log(data);
         setPolls(data || []);
       } catch (err) {
         console.error("Error in fetching polls:", err);
         Alert.alert("Error", "Failed to load polls");
+      } finally {
+        setLoading(false);
       }
     };
     
@@ -39,24 +44,36 @@ const HomeScreen = () => {
         options={{
           title: "भोट दिनुहोस",
           headerRight: () => (
-            <Link href={"/polls/new"}>
+            <Link href="/polls/new" asChild>
               <AntDesign name="plus" size={20} color="gray" />
             </Link>
           ),
         }}
       />
-      <FlatList
-        data={polls}
-        keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={{ padding: 10, gap: 5 }}
-        renderItem={({ item }) => (
-          <Link href={`/polls/${item.id}`}>
-            <View style={styles.pollContainer}>
-              <Text style={styles.pollTitle}>{item.question}</Text>
+      
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <Text>Loading polls...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={polls}
+          keyExtractor={(item) => item.id.toString()}
+          contentContainerStyle={styles.listContent}
+          renderItem={({ item }) => (
+            <Link href={`/polls/${item.id}`} asChild>
+              <View style={styles.pollContainer}>
+                <Text style={styles.pollTitle}>{item.question}</Text>
+              </View>
+            </Link>
+          )}
+          ListEmptyComponent={() => (
+            <View style={styles.emptyContainer}>
+              <Text>No polls found. Create a new one!</Text>
             </View>
-          </Link>
-        )}
-      />
+          )}
+        />
+      )}
     </View>
   );
 };
@@ -68,10 +85,18 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "gainsboro",
   },
-  headerText: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 16,
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  listContent: {
+    padding: 10,
+    paddingTop: 20,
+  },
+  emptyContainer: {
+    padding: 20,
+    alignItems: 'center',
   },
   pollContainer: {
     backgroundColor: "white",
@@ -86,7 +111,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 2,
-    marginTop: 20,
   },
   pollTitle: {
     fontWeight: "bold",

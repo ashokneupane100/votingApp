@@ -1,16 +1,28 @@
 import { Stack, useLocalSearchParams, router } from "expo-router";
-import { View, Text, StyleSheet, Pressable, Button, Alert, ActivityIndicator } from "react-native";
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  Alert, 
+  ActivityIndicator, 
+  ScrollView 
+} from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
+import { Tables } from "../../types/supabase";
+
+type Poll = Tables<"polls">;
 
 export default function PollDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [poll, setPoll] = useState(null);
-  const [options, setOptions] = useState([]);
-  const [selected, setSelected] = useState(null);
+  const [poll, setPoll] = useState<Poll | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [voteCounts, setVoteCounts] = useState<Record<string, number>>({});
+  const [totalVotes, setTotalVotes] = useState(0);
 
   useEffect(() => {
     if (!id) return;
@@ -18,6 +30,7 @@ export default function PollDetails() {
     const fetchPoll = async () => {
       try {
         setLoading(true);
+        
         // Fetch the poll
         const { data: pollData, error: pollError } = await supabase
           .from('polls')
@@ -25,31 +38,32 @@ export default function PollDetails() {
           .eq('id', id)
           .single();
 
-        if (pollError) {
-          console.error("Error fetching poll:", pollError);
-          Alert.alert("Error", "Failed to load poll details");
-          setLoading(false);
-          return;
-        }
-
-        // Fetch the options
-        const { data: optionsData, error: optionsError } = await supabase
-          .from('options')
-          .select('*')
-          .eq('poll_id', id);
-
-        if (optionsError) {
-          console.error("Error fetching options:", optionsError);
-          Alert.alert("Error", "Failed to load poll options");
-          setLoading(false);
-          return;
-        }
+        if (pollError) throw pollError;
 
         setPoll(pollData);
-        setOptions(optionsData || []);
-      } catch (err) {
-        console.error("Error loading poll data:", err);
-        Alert.alert("Error", "Something went wrong loading the poll");
+        
+        // Fetch vote counts for this poll
+        const { data: votesData, error: votesError } = await supabase
+          .from('votes')
+          .select('option_value, count')
+          .eq('poll_id', id)
+          .group('option_value');
+          
+        if (!votesError && votesData) {
+          const counts: Record<string, number> = {};
+          let total = 0;
+          
+          votesData.forEach(vote => {
+            counts[vote.option_value] = vote.count;
+            total += vote.count;
+          });
+          
+          setVoteCounts(counts);
+          setTotalVotes(total);
+        }
+      } catch (error) {
+        console.error("Error loading poll data:", error);
+        Alert.alert("Error", "Failed to load the poll");
       } finally {
         setLoading(false);
       }
@@ -67,38 +81,52 @@ export default function PollDetails() {
     try {
       setSubmitting(true);
       
-      // Record the vote in the database
+      // Record the vote
       const { error } = await supabase
         .from('votes')
         .insert({
-          option_id: selected,
           poll_id: id,
-          // You might want to include user_id if you have authentication
+          option_value: selected,
+          created_at: new Date().toISOString()
         });
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
-      Alert.alert("Success", "Your vote has been recorded!", [
-        {
-          text: "OK",
-          onPress: () => router.replace("/")
-        }
-      ]);
-    } catch (err) {
-      console.error("Error submitting vote:", err);
-      Alert.alert("Error", "Failed to submit your vote");
+      // Update the local vote count
+      setVoteCounts(prev => ({
+        ...prev,
+        [selected]: (prev[selected] || 0) + 1
+      }));
+      
+      setTotalVotes(prev => prev + 1);
+
+      Alert.alert(
+        "Success", 
+        "Your vote has been recorded!", 
+        [{ text: "OK" }]
+      );
+      
+      // Clear selection
+      setSelected(null);
+      
+    } catch (error: any) {
+      console.error("Error submitting vote:", error);
+      Alert.alert("Error", `Failed to submit your vote: ${error.message}`);
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const getPercentage = (option: string): number => {
+    if (!totalVotes) return 0;
+    return Math.round(((voteCounts[option] || 0) / totalVotes) * 100);
   };
 
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
         <ActivityIndicator size="large" color="#0000ff" />
-        <Text>Loading poll...</Text>
+        <Text style={styles.loadingText}>Loading poll...</Text>
       </View>
     );
   }
@@ -106,64 +134,205 @@ export default function PollDetails() {
   if (!poll) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <Text>Poll not found</Text>
-        <Button title="Go Back" onPress={() => router.back()} />
+        <Text style={styles.errorText}>Poll not found</Text>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <Text style={styles.backButtonText}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Stack.Screen options={{ title: poll.question }} />
+    <ScrollView style={styles.container}>
+      <Stack.Screen options={{ title: "Poll" }} />
 
       <Text style={styles.question}>{poll.question}</Text>
 
-      <View style={{ gap: 5 }}>
-        {options.map((option) => (
-          <Pressable
-            onPress={() => setSelected(option.id)}
-            key={option.id}
-            style={styles.optionContainer}
+      <View style={styles.optionsContainer}>
+        {poll.options?.map((option, index) => (
+          <TouchableOpacity
+            key={index}
+            onPress={() => setSelected(option)}
+            style={[
+              styles.optionCard,
+              selected === option && styles.selectedOption
+            ]}
           >
-            <Feather
-              name={option.id === selected ? "check-circle" : "circle"}
-              size={18}
-              color={option.id === selected ? "green" : "gray"}
-            />
-            <Text>{option.text}</Text>
-          </Pressable>
+            <View style={styles.optionHeader}>
+              <Feather
+                name={selected === option ? "check-circle" : "circle"}
+                size={20}
+                color={selected === option ? "#2ecc71" : "#bdc3c7"}
+              />
+              <Text style={styles.optionText}>{option}</Text>
+            </View>
+            
+            {/* Only show vote results if there are votes */}
+            {totalVotes > 0 && (
+              <View style={styles.resultContainer}>
+                <View 
+                  style={[
+                    styles.progressBar,
+                    { width: `${getPercentage(option)}%` }
+                  ]} 
+                />
+                <Text style={styles.voteCount}>
+                  {voteCounts[option] || 0} votes ({getPercentage(option)}%)
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
         ))}
       </View>
       
-      <Button 
+      <TouchableOpacity 
         onPress={vote} 
-        title={submitting ? "Submitting..." : "Vote"} 
-        disabled={submitting || !selected}
-      />
-    </View>
+        style={[
+          styles.voteButton,
+          (!selected || submitting) && styles.disabledButton
+        ]}
+        disabled={!selected || submitting}
+      >
+        {submitting ? (
+          <ActivityIndicator size="small" color="white" />
+        ) : (
+          <Text style={styles.voteButtonText}>Submit Vote</Text>
+        )}
+      </TouchableOpacity>
+      
+      {totalVotes > 0 && (
+        <Text style={styles.totalVotes}>
+          Total votes: {totalVotes}
+        </Text>
+      )}
+      
+      <TouchableOpacity 
+        style={styles.homeButton}
+        onPress={() => router.replace("/")}
+      >
+        <Feather name="home" size={16} color="#3498db" />
+        <Text style={styles.homeButtonText}>Back to Polls</Text>
+      </TouchableOpacity>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    padding: 10,
-    gap: 10,
     flex: 1,
+    padding: 16,
+    backgroundColor: '#f5f5f5',
   },
   centered: {
     justifyContent: 'center',
     alignItems: 'center',
   },
-  question: {
-    fontSize: 20,
-    fontWeight: "600",
+  loadingText: {
+    marginTop: 8,
+    fontSize: 16,
   },
-  optionContainer: {
+  errorText: {
+    fontSize: 18,
+    marginBottom: 16,
+  },
+  question: {
+    fontSize: 22,
+    fontWeight: "600",
+    marginBottom: 24,
+    color: '#2c3e50',
+  },
+  optionsContainer: {
+    marginBottom: 24,
+  },
+  optionCard: {
     backgroundColor: "white",
-    padding: 10,
-    borderRadius: 5,
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    overflow: 'hidden',
+  },
+  selectedOption: {
+    borderColor: '#2ecc71',
+    borderWidth: 2,
+  },
+  optionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    marginBottom: 8,
+  },
+  optionText: {
+    fontSize: 16,
+    marginLeft: 12,
+    flex: 1,
+  },
+  resultContainer: {
+    marginTop: 8,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#f0f0f0',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  progressBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    backgroundColor: '#3498db',
+    opacity: 0.6,
+  },
+  voteCount: {
+    position: 'absolute',
+    right: 8,
+    top: 3,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  voteButton: {
+    backgroundColor: '#2ecc71',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  disabledButton: {
+    backgroundColor: '#95a5a6',
+  },
+  voteButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  totalVotes: {
+    textAlign: 'center',
+    marginBottom: 24,
+    fontSize: 14,
+    color: '#7f8c8d',
+  },
+  backButton: {
+    backgroundColor: '#3498db',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+  },
+  backButtonText: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  homeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+  },
+  homeButtonText: {
+    color: '#3498db',
+    marginLeft: 8,
+    fontSize: 16,
   },
 });
