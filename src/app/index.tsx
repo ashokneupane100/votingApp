@@ -1,6 +1,8 @@
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import React from "react";
 import { Stack, Link } from "expo-router";
+import { AntDesign } from "@expo/vector-icons";
+
 
 // Let's make the poll data more realistic
 const polls = [
@@ -12,7 +14,14 @@ const polls = [
 const HomeScreen = () => {
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ title: "भोट दिनुहोस" }} />
+      <Stack.Screen options={{ 
+        title: "भोट दिनुहोस",
+        headerRight: () => (
+          <Link href={"/polls/new"}>
+            <AntDesign name="plus" size={20} color="gray" />
+          </Link>
+        )
+      }} />
       <FlatList
         data={polls}
         keyExtractor={(item) => item.id}
