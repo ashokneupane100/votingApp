@@ -12,10 +12,11 @@ import { Feather } from "@expo/vector-icons";
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 import { Tables } from "../../types/supabase";
+import { Protected } from "../../components/AuthContext";
 
 type Poll = Tables<"polls">;
 
-export default function PollDetails() {
+function PollDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [poll, setPoll] = useState<Poll | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -217,6 +218,15 @@ export default function PollDetails() {
         <Text style={styles.homeButtonText}>Back to Polls</Text>
       </TouchableOpacity>
     </ScrollView>
+  );
+}
+
+// Protected wrapper component
+export default function ProtectedPollDetails() {
+  return (
+    <Protected>
+      <PollDetails />
+    </Protected>
   );
 }
 

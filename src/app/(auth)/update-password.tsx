@@ -1,77 +1,42 @@
 import React, { useState, useEffect } from 'react'
 import { 
-  Alert, 
   StyleSheet, 
   View, 
-  AppState, 
   Text, 
   TextInput, 
   TouchableOpacity, 
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
-  ScrollView
+  SafeAreaView
 } from 'react-native'
-import { router, Stack } from 'expo-router'
-import { supabase } from '../../lib/supabase'
+import { Stack, router } from 'expo-router'
+import { supabase } from '../lib/supabase'
 import { Feather } from '@expo/vector-icons'
 
-// Set up AppState listener for auth refresh management
-AppState.addEventListener('change', (state) => {
-  if (state === 'active') {
-    supabase.auth.startAutoRefresh()
-  } else {
-    supabase.auth.stopAutoRefresh()
-  }
-})
-
-export default function Login() {
-  const [email, setEmail] = useState('')
+export default function UpdatePassword() {
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   // Clear error message when inputs change
   useEffect(() => {
     if (errorMessage) setErrorMessage(null)
-  }, [email, password])
+  }, [password, confirmPassword])
 
-  async function signInWithEmail() {
-    if (!email || !password) {
-      setErrorMessage("Please enter both email and password")
-      return
-    }
+  async function handleUpdatePassword() {
+    // Reset messages
+    setErrorMessage(null)
+    setSuccessMessage(null)
     
-    try {
-      setLoading(true)
-      setErrorMessage(null)
-      
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-
-      if (error) {
-        console.error("Sign in error:", error.message)
-        setErrorMessage(error.message)
-      } else {
-        // Redirect to home on successful login
-        router.replace("/")
-      }
-    } catch (e: any) {
-      console.error("Unexpected error during sign in:", e)
-      setErrorMessage("An unexpected error occurred")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function signUpWithEmail() {
     // Validate input
-    if (!email || !password) {
-      setErrorMessage("Please enter both email and password")
+    if (!password || !confirmPassword) {
+      setErrorMessage("Please enter both fields")
       return
     }
     
@@ -80,33 +45,40 @@ export default function Login() {
       return
     }
     
+    if (password !== confirmPassword) {
+      setErrorMessage("Passwords do not match")
+      return
+    }
+    
     try {
       setLoading(true)
-      setErrorMessage(null)
       
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: window.location.origin // Important for email confirmation flow
-        }
+      const { error } = await supabase.auth.updateUser({
+        password: password
       })
 
       if (error) {
-        console.error("Sign up error:", error.message)
         setErrorMessage(error.message)
-        return
-      }
-      
-      // Check if session exists (immediate sign-in) or needs email verification
-      if (data?.session) {
-        Alert.alert("Success", "Signed up and logged in successfully!")
-        router.replace("/")
       } else {
-        Alert.alert("Success", "Please check your email for the confirmation link")
+        setSuccessMessage("Password updated successfully")
+        
+        // Clear form
+        setPassword('')
+        setConfirmPassword('')
+        
+        // Show success message and redirect
+        Alert.alert(
+          "Success", 
+          "Your password has been updated. You can now log in with your new password.", 
+          [
+            { 
+              text: "Go to Login", 
+              onPress: () => router.replace("/login") 
+            }
+          ]
+        )
       }
     } catch (e: any) {
-      console.error("Unexpected error during sign up:", e)
       setErrorMessage(e.message || "An unexpected error occurred")
     } finally {
       setLoading(false)
@@ -115,51 +87,44 @@ export default function Login() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Stack.Screen options={{ title: "Login" }} />
+      <Stack.Screen options={{ title: "Update Password" }} />
       
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardAvoidView}
       >
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <View style={styles.contentContainer}>
           <View style={styles.formContainer}>
-            <Text style={styles.headerText}>Welcome Back</Text>
-            <Text style={styles.subHeaderText}>Sign in or create an account</Text>
+            <Text style={styles.headerText}>Create New Password</Text>
+            <Text style={styles.subHeaderText}>
+              Enter and confirm your new password
+            </Text>
             
-            {/* Error message display */}
             {errorMessage && (
               <View style={styles.errorContainer}>
                 <Feather name="alert-circle" size={18} color="#e74c3c" />
                 <Text style={styles.errorText}>{errorMessage}</Text>
               </View>
             )}
+            
+            {successMessage && (
+              <View style={styles.successContainer}>
+                <Feather name="check-circle" size={18} color="#2ecc71" />
+                <Text style={styles.successText}>{successMessage}</Text>
+              </View>
+            )}
 
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                onChangeText={setEmail}
-                value={email}
-                placeholder="email@example.com"
-                autoCapitalize="none"
-                keyboardType="email-address"
-                style={styles.input}
-                textContentType="emailAddress"
-                autoComplete="email"
-              />
-            </View>
-            
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Password</Text>
+              <Text style={styles.label}>New Password</Text>
               <View style={styles.passwordContainer}>
                 <TextInput
                   onChangeText={setPassword}
                   value={password}
                   secureTextEntry={!showPassword}
-                  placeholder="Password"
+                  placeholder="Enter new password"
                   autoCapitalize="none"
                   style={styles.passwordInput}
-                  textContentType="password"
-                  autoComplete="password"
+                  textContentType="newPassword"
                 />
                 <TouchableOpacity
                   onPress={() => setShowPassword(!showPassword)}
@@ -174,41 +139,53 @@ export default function Login() {
                 </TouchableOpacity>
               </View>
             </View>
-
+            
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Confirm Password</Text>
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  onChangeText={setConfirmPassword}
+                  value={confirmPassword}
+                  secureTextEntry={!showConfirmPassword}
+                  placeholder="Confirm new password"
+                  autoCapitalize="none"
+                  style={styles.passwordInput}
+                  textContentType="newPassword"
+                />
+                <TouchableOpacity
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={styles.eyeIcon}
+                  accessibilityLabel={showConfirmPassword ? "Hide password" : "Show password"}
+                >
+                  <Feather 
+                    name={showConfirmPassword ? "eye" : "eye-off"} 
+                    size={20} 
+                    color="gray" 
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+            
             <TouchableOpacity 
               style={[styles.button, loading && styles.buttonDisabled]} 
               disabled={loading} 
-              onPress={signInWithEmail}
+              onPress={handleUpdatePassword}
             >
               {loading ? (
                 <ActivityIndicator size="small" color="white" />
               ) : (
-                <Text style={styles.buttonText}>SIGN IN</Text>
+                <Text style={styles.buttonText}>UPDATE PASSWORD</Text>
               )}
             </TouchableOpacity>
             
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR</Text>
-              <View style={styles.dividerLine} />
-            </View>
-            
-            <TouchableOpacity 
-              style={[styles.button, styles.signUpButton, loading && styles.buttonDisabled]} 
-              disabled={loading} 
-              onPress={signUpWithEmail}
-            >
-              <Text style={styles.buttonText}>CREATE ACCOUNT</Text>
-            </TouchableOpacity>
-            
             <TouchableOpacity
-              style={styles.forgotPasswordButton}
-              onPress={() => router.push("/reset-password")}
+              style={styles.cancelButton}
+              onPress={() => router.replace("/login")}
             >
-              <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+              <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
           </View>
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   )
@@ -222,10 +199,10 @@ const styles = StyleSheet.create({
   keyboardAvoidView: {
     flex: 1,
   },
-  scrollContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
+  contentContainer: {
+    flex: 1,
     padding: 20,
+    justifyContent: 'center',
   },
   formContainer: {
     backgroundColor: 'white',
@@ -241,14 +218,12 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 8,
-    textAlign: 'center',
     color: '#333',
   },
   subHeaderText: {
     fontSize: 16,
     color: '#666',
     marginBottom: 24,
-    textAlign: 'center',
   },
   errorContainer: {
     flexDirection: 'row',
@@ -263,6 +238,19 @@ const styles = StyleSheet.create({
     color: '#e74c3c',
     flex: 1,
   },
+  successContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e6f9ed',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  successText: {
+    marginLeft: 8,
+    color: '#2ecc71',
+    flex: 1,
+  },
   inputContainer: {
     marginBottom: 16,
   },
@@ -270,14 +258,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     fontWeight: '500',
     color: '#333',
-  },
-  input: {
-    backgroundColor: "#f9f9f9",
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    fontSize: 16,
   },
   passwordContainer: {
     position: 'relative',
@@ -305,9 +285,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
   },
-  signUpButton: {
-    backgroundColor: '#4CAF50',
-  },
   buttonDisabled: {
     opacity: 0.6,
   },
@@ -316,26 +293,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 20,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#e0e0e0',
-  },
-  dividerText: {
-    paddingHorizontal: 10,
-    color: '#666',
-  },
-  forgotPasswordButton: {
+  cancelButton: {
     marginTop: 16,
     alignItems: 'center',
   },
-  forgotPasswordText: {
-    color: '#2196F3',
-    fontSize: 14,
+  cancelButtonText: {
+    color: '#666',
+    fontSize: 16,
   },
 });

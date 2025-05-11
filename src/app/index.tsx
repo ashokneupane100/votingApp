@@ -1,15 +1,17 @@
-import { Alert, FlatList, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import React, { useEffect, useState } from "react";
 import { Stack, Link, router } from "expo-router";
-import { AntDesign } from "@expo/vector-icons";
+import { AntDesign, Feather } from "@expo/vector-icons";
 import { supabase } from "../lib/supabase";
 import { Tables } from "../types/supabase";
+import { Protected, useAuth } from "../components/AuthContext";
 
 type Poll = Tables<"polls">;
 
-const HomeScreen = () => {
+function HomeScreen() {
   const [polls, setPolls] = useState<Poll[]>([]);
   const [loading, setLoading] = useState(true);
+  const { signOut, user } = useAuth();
 
   useEffect(() => {
     const fetchPolls = async () => {
@@ -18,7 +20,8 @@ const HomeScreen = () => {
         
         const { data, error } = await supabase
           .from('polls')
-          .select('*');
+          .select('*')
+          .order('createdAt', { ascending: false });
           
         if (error) {
           console.error("Supabase error:", error);
@@ -38,25 +41,51 @@ const HomeScreen = () => {
     fetchPolls();
   }, []);
 
+  const handleSignOut = async () => {
+    Alert.alert(
+      "Sign Out",
+      "Are you sure you want to sign out?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Sign Out",
+          onPress: signOut
+        }
+      ]
+    );
+  };
+
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
           title: "भोट दिनुहोस",
-          headerTitleAlign:"center",
           headerRight: () => (
-            <Link href="/polls/new" asChild>
-              <AntDesign name="plus" size={20} color="gray" />
-            </Link>
+            <View style={styles.headerButtons}>
+              <Link href="/polls/new" asChild>
+                <TouchableOpacity style={styles.iconButton}>
+                  <AntDesign name="plus" size={22} color="#2196F3" />
+                </TouchableOpacity>
+              </Link>
+              <TouchableOpacity 
+                style={styles.iconButton} 
+                onPress={handleSignOut}
+              >
+                <Feather name="log-out" size={22} color="#e74c3c" />
+              </TouchableOpacity>
+            </View>
           ),
-          headerLeft:()=>(
-             <Link href="/login" asChild>
-              <AntDesign name="user" size={20} color="gray" />
-            </Link>
-
-          )
         }}
       />
+      
+      <View style={styles.welcomeContainer}>
+        <Text style={styles.welcomeText}>
+          Welcome, {user?.email?.split('@')[0] || 'User'}!
+        </Text>
+      </View>
       
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -69,28 +98,67 @@ const HomeScreen = () => {
           contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
             <Link href={`/polls/${item.id}`} asChild>
-              <View style={styles.pollContainer}>
+              <TouchableOpacity style={styles.pollContainer}>
                 <Text style={styles.pollTitle}>{item.question}</Text>
-              </View>
+                <View style={styles.pollMeta}>
+                  <Text style={styles.pollDate}>
+                    {new Date(item.createdAt || '').toLocaleDateString()}
+                  </Text>
+                  <Text style={styles.pollOptions}>
+                    {item.options?.length || 0} options
+                  </Text>
+                </View>
+              </TouchableOpacity>
             </Link>
           )}
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
-              <Text>No polls found. Create a new one!</Text>
+              <Text style={styles.emptyText}>No polls found</Text>
+              <TouchableOpacity
+                style={styles.createButton}
+                onPress={() => router.push('/polls/new')}
+              >
+                <Text style={styles.createButtonText}>Create New Poll</Text>
+              </TouchableOpacity>
             </View>
           )}
         />
       )}
     </View>
   );
-};
+}
 
-export default HomeScreen;
+// Protected wrapper component
+export default function ProtectedHomeScreen() {
+  return (
+    <Protected>
+      <HomeScreen />
+    </Protected>
+  );
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "gainsboro",
+    backgroundColor: "#f5f5f5",
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  welcomeContainer: {
+    padding: 16,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  welcomeText: {
+    fontSize: 16,
+    color: '#333',
   },
   loadingContainer: {
     flex: 1,
@@ -98,18 +166,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   listContent: {
-    padding: 10,
-    paddingTop: 20,
+    padding: 16,
   },
   emptyContainer: {
     padding: 20,
     alignItems: 'center',
+    justifyContent: 'center',
+    height: 300,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 16,
+  },
+  createButton: {
+    backgroundColor: '#2196F3',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  createButtonText: {
+    color: 'white',
+    fontWeight: '600',
   },
   pollContainer: {
     backgroundColor: "white",
-    padding: 15,
+    padding: 16,
     borderRadius: 8,
-    marginBottom: 10,
+    marginBottom: 12,
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
@@ -122,5 +206,19 @@ const styles = StyleSheet.create({
   pollTitle: {
     fontWeight: "bold",
     fontSize: 16,
+    marginBottom: 8,
+    color: '#333',
+  },
+  pollMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  pollDate: {
+    fontSize: 12,
+    color: '#666',
+  },
+  pollOptions: {
+    fontSize: 12,
+    color: '#666',
   },
 });
