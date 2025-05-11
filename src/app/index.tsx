@@ -43,11 +43,18 @@ const HomeScreen = () => {
       <Stack.Screen
         options={{
           title: "भोट दिनुहोस",
+          headerTitleAlign:"center",
           headerRight: () => (
             <Link href="/polls/new" asChild>
               <AntDesign name="plus" size={20} color="gray" />
             </Link>
           ),
+          headerLeft:()=>(
+             <Link href="/login" asChild>
+              <AntDesign name="user" size={20} color="gray" />
+            </Link>
+
+          )
         }}
       />
       
