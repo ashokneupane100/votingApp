@@ -3,10 +3,14 @@ import React, { useEffect, useState } from "react";
 import { Stack, Link, router } from "expo-router";
 import { AntDesign, Feather } from "@expo/vector-icons";
 import { supabase } from "../lib/supabase";
-import { Tables } from "../types/supabase";
 import { Protected, useAuth } from "../components/AuthContext";
 
-type Poll = Tables<"polls">;
+type Poll = {
+  id: number;
+  question: string;
+  options: string[];
+  createdAt: string | null;
+};
 
 function HomeScreen() {
   const [polls, setPolls] = useState<Poll[]>([]);

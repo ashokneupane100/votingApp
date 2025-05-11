@@ -11,10 +11,19 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
-import { Tables } from "../../types/supabase";
 import { Protected } from "../../components/AuthContext";
 
-type Poll = Tables<"polls">;
+type Poll = {
+  id: number;
+  question: string;
+  options: string[];
+  createdAt: string | null;
+};
+
+type Vote = {
+  option_value: string;
+  count: number;
+};
 
 function PollDetails() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -54,7 +63,7 @@ function PollDetails() {
           const counts: Record<string, number> = {};
           let total = 0;
           
-          votesData.forEach(vote => {
+          votesData.forEach((vote: Vote) => {
             counts[vote.option_value] = vote.count;
             total += vote.count;
           });

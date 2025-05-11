@@ -12,7 +12,7 @@ import {
   SafeAreaView
 } from 'react-native'
 import { Stack, router } from 'expo-router'
-import { supabase } from '../lib/supabase'
+import { supabase } from '../../lib/supabase'
 import { Feather } from '@expo/vector-icons'
 
 export default function UpdatePassword() {
