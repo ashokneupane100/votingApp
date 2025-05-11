@@ -10,8 +10,8 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabase";
-import { Protected } from "../../components/AuthContext";
+import { supabase, addVote } from "../../lib/supabase";
+import { Protected, useAuth } from "../../components/AuthContext";
 
 type Poll = {
   id: number;
@@ -20,9 +20,9 @@ type Poll = {
   createdAt: string | null;
 };
 
-type Vote = {
+type VoteCount = {
   option_value: string;
-  count: number;
+  count: number | string;
 };
 
 function PollDetails() {
@@ -33,6 +33,8 @@ function PollDetails() {
   const [submitting, setSubmitting] = useState(false);
   const [voteCounts, setVoteCounts] = useState<Record<string, number>>({});
   const [totalVotes, setTotalVotes] = useState(0);
+  const [hasVoted, setHasVoted] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     if (!id) return;
@@ -48,28 +50,34 @@ function PollDetails() {
           .eq('id', id)
           .single();
 
-        if (pollError) throw pollError;
+        if (pollError) {
+          console.error("Error fetching poll:", pollError.message);
+          throw pollError;
+        }
+
+        if (!pollData) {
+          console.error("No poll found with id:", id);
+          throw new Error("Poll not found");
+        }
 
         setPoll(pollData);
         
-        // Fetch vote counts for this poll
-        const { data: votesData, error: votesError } = await supabase
-          .from('votes')
-          .select('option_value, count')
-          .eq('poll_id', id)
-          .group('option_value');
+        // Fetch vote counts
+        await fetchVoteCounts();
+        
+        // Check if user has already voted
+        if (user) {
+          const { data: userVoteData, error: userVoteError } = await supabase
+            .from('votes')
+            .select('option_value')
+            .eq('poll_id', id)
+            .eq('voter_id', user.id)
+            .single();
           
-        if (!votesError && votesData) {
-          const counts: Record<string, number> = {};
-          let total = 0;
-          
-          votesData.forEach((vote: Vote) => {
-            counts[vote.option_value] = vote.count;
-            total += vote.count;
-          });
-          
-          setVoteCounts(counts);
-          setTotalVotes(total);
+          if (!userVoteError && userVoteData) {
+            setHasVoted(true);
+            setSelected(userVoteData.option_value);
+          }
         }
       } catch (error) {
         console.error("Error loading poll data:", error);
@@ -80,7 +88,45 @@ function PollDetails() {
     };
 
     fetchPoll();
-  }, [id]);
+  }, [id, user]);
+
+  const fetchVoteCounts = async () => {
+    if (!id) return;
+    
+    try {
+      // Fetch vote counts for this poll
+      const { data: votesData, error: votesError } = await supabase
+        .from('votes')
+        .select('option_value, count(*)')
+        .eq('poll_id', id)
+        .group('option_value');
+        
+      if (votesError) {
+        console.error("Error fetching vote counts:", votesError.message);
+        return;
+      }
+      
+      if (votesData && votesData.length > 0) {
+        const counts: Record<string, number> = {};
+        let total = 0;
+        
+        votesData.forEach((vote: VoteCount) => {
+          // Convert count to number (it could be returned as string)
+          const voteCount = typeof vote.count === 'string' 
+            ? parseInt(vote.count, 10) 
+            : vote.count;
+            
+          counts[vote.option_value] = voteCount;
+          total += voteCount;
+        });
+        
+        setVoteCounts(counts);
+        setTotalVotes(total);
+      }
+    } catch (error) {
+      console.error("Error processing vote counts:", error);
+    }
+  };
 
   const vote = async () => {
     if (!selected) {
@@ -88,19 +134,31 @@ function PollDetails() {
       return;
     }
 
+    if (hasVoted) {
+      Alert.alert("Already Voted", "You have already voted in this poll");
+      return;
+    }
+
     try {
       setSubmitting(true);
       
-      // Record the vote
-      const { error } = await supabase
-        .from('votes')
-        .insert({
-          poll_id: id,
-          option_value: selected,
-          created_at: new Date().toISOString()
-        });
+      // Record the vote using the helper function
+      const { error } = await addVote(
+        parseInt(id as string, 10),
+        selected,
+        user?.id
+      );
 
-      if (error) throw error;
+      if (error) {
+        // Check for unique constraint violation (user already voted)
+        if (error.code === '23505') {
+          setHasVoted(true);
+          Alert.alert("Already Voted", "You have already voted in this poll");
+          return;
+        }
+        
+        throw error;
+      }
 
       // Update the local vote count
       setVoteCounts(prev => ({
@@ -109,15 +167,13 @@ function PollDetails() {
       }));
       
       setTotalVotes(prev => prev + 1);
+      setHasVoted(true);
 
       Alert.alert(
         "Success", 
         "Your vote has been recorded!", 
         [{ text: "OK" }]
       );
-      
-      // Clear selection
-      setSelected(null);
       
     } catch (error: any) {
       console.error("Error submitting vote:", error);
@@ -161,11 +217,19 @@ function PollDetails() {
 
       <Text style={styles.question}>{poll.question}</Text>
 
+      {hasVoted && (
+        <View style={styles.votedBadge}>
+          <Feather name="check-circle" size={16} color="#fff" />
+          <Text style={styles.votedText}>You voted</Text>
+        </View>
+      )}
+
       <View style={styles.optionsContainer}>
         {poll.options?.map((option, index) => (
           <TouchableOpacity
             key={index}
-            onPress={() => setSelected(option)}
+            onPress={() => !hasVoted && setSelected(option)}
+            disabled={hasVoted}
             style={[
               styles.optionCard,
               selected === option && styles.selectedOption
@@ -180,8 +244,8 @@ function PollDetails() {
               <Text style={styles.optionText}>{option}</Text>
             </View>
             
-            {/* Only show vote results if there are votes */}
-            {totalVotes > 0 && (
+            {/* Always show results if user has voted */}
+            {(totalVotes > 0 || hasVoted) && (
               <View style={styles.resultContainer}>
                 <View 
                   style={[
@@ -198,22 +262,24 @@ function PollDetails() {
         ))}
       </View>
       
-      <TouchableOpacity 
-        onPress={vote} 
-        style={[
-          styles.voteButton,
-          (!selected || submitting) && styles.disabledButton
-        ]}
-        disabled={!selected || submitting}
-      >
-        {submitting ? (
-          <ActivityIndicator size="small" color="white" />
-        ) : (
-          <Text style={styles.voteButtonText}>Submit Vote</Text>
-        )}
-      </TouchableOpacity>
+      {!hasVoted && (
+        <TouchableOpacity 
+          onPress={vote} 
+          style={[
+            styles.voteButton,
+            (!selected || submitting) && styles.disabledButton
+          ]}
+          disabled={!selected || submitting}
+        >
+          {submitting ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <Text style={styles.voteButtonText}>Submit Vote</Text>
+          )}
+        </TouchableOpacity>
+      )}
       
-      {totalVotes > 0 && (
+      {(totalVotes > 0 || hasVoted) && (
         <Text style={styles.totalVotes}>
           Total votes: {totalVotes}
         </Text>
@@ -262,6 +328,21 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 24,
     color: '#2c3e50',
+  },
+  votedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2ecc71',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginBottom: 16,
+  },
+  votedText: {
+    color: '#fff',
+    fontWeight: '600',
+    marginLeft: 6,
   },
   optionsContainer: {
     marginBottom: 24,

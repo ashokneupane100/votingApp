@@ -55,6 +55,38 @@ export type Database = {
         }
         Relationships: []
       }
+      votes: {
+        Row: {
+          created_at: string | null
+          id: number
+          option_value: string
+          poll_id: number
+          voter_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: number
+          option_value: string
+          poll_id: number
+          voter_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: number
+          option_value?: string
+          poll_id?: number
+          voter_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "votes_poll_id_fkey"
+            columns: ["poll_id"]
+            isOneToOne: false
+            referencedRelation: "polls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
